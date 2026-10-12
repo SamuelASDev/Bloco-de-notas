@@ -3,13 +3,13 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Drawer } from "expo-router/drawer";
 import { useEffect, useRef, useState } from "react";
 import {
-    Modal,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Modal,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from "react-native";
 
 export default function NovaNota() {
@@ -36,7 +36,10 @@ export default function NovaNota() {
     setTexto(textoInicial);
     setPosicaoCursor({ start: 0, end: 0 });
     carregarPastas();
-  }, [idNota]);
+
+    // CORREÇÃO AQUI: Força a atualização da pasta sempre que a tela abre com novos parâmetros
+    setPastaIdAtual((params.pastaId as string) || "padrao");
+  }, [idNota, params.pastaId]); // Adicionamos params.pastaId como dependência
 
   const carregarPastas = async () => {
     const pastasSalvas = await AsyncStorage.getItem("pastas");
