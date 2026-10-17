@@ -7,10 +7,6 @@
     "icon": "./assets/images/bloco.png",
     "scheme": "blocodenotas",
     "userInterfaceStyle": "automatic",
-    "androidNavigationBar": {
-      "backgroundColor": "#1E1E1E",
-      "barStyle": "light"
-    },
     "ios": {
       "icon": "./assets/expo.icon"
     },
@@ -38,7 +34,34 @@
         }
       ],
       "react-native-edge-to-edge",
-      "expo-sharing"
+      [
+        "expo-sharing",
+        {
+          "android": {
+            "enabled": true,
+            "singleShareMimeTypes": ["text/plain"],
+            "multipleShareMimeTypes": []
+          }
+        }
+      ],
+      [
+        "react-native-android-widget",
+        {
+          "widgets": [
+            {
+              "name": "QuickNote",
+              "label": "Nota rápida",
+              "description": "Crie uma nota ou checklist com um toque.",
+              "minWidth": "250dp",
+              "minHeight": "110dp",
+              "targetCellWidth": 4,
+              "targetCellHeight": 2,
+              "resizeMode": "horizontal",
+              "updatePeriodMillis": 0
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,

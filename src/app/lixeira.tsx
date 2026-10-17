@@ -1,327 +1,221 @@
-import { MaterialIcons } from "@expo/vector-icons";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useFocusEffect } from "expo-router";
-import { Drawer } from "expo-router/drawer"; // Importante para o cabeçalho
-import { useCallback, useState } from "react";
+import { useState } from "react";
+import { FlatList, Pressable, Text, TextInput, View } from "react-native";
+import { Stack } from "expo-router";
 import {
-    Alert,
-    FlatList,
-    Modal,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
-} from "react-native";
+  Alert,
+  Button,
+  Empty,
+  formatDate,
+  IconButton,
+  run,
+  Screen,
+  Sheet,
+  usePalette,
+} from "@/components/notebook-ui";
+import { normalizeSearch, Note, noteText, noteTitle } from "@/data/model";
+import { removeNotes, updateNotes, useNotebook } from "@/data/store";
 
-export default function Lixeira() {
-  const [notas, setNotas] = useState<any[]>([]);
-  const [modalVisivel, setModalVisivel] = useState(false);
-  const [notaSelecionada, setNotaSelecionada] = useState<any>(null);
-
-  // Estados para a barra de pesquisa
-  const [pesquisa, setPesquisa] = useState("");
-  const [pesquisaVisivel, setPesquisaVisivel] = useState(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      carregarLixeira();
-    }, []),
-  );
-
-  const carregarLixeira = async () => {
-    try {
-      const notasSalvas = await AsyncStorage.getItem("notas");
-      if (notasSalvas) {
-        const todasNotas = JSON.parse(notasSalvas);
-        setNotas(todasNotas.filter((n: any) => n.lixeira));
-      }
-    } catch (error) {
-      console.log("Erro ao carregar a lixeira:", error);
-    }
-  };
-
-  const formatarData = (dataISO: string) => {
-    if (!dataISO) return "";
-    const data = new Date(dataISO);
-    const dia = data.getDate().toString().padStart(2, "0");
-    const meses = [
-      "jan.",
-      "fev.",
-      "mar.",
-      "abr.",
-      "mai.",
-      "jun.",
-      "jul.",
-      "ago.",
-      "set.",
-      "out.",
-      "nov.",
-      "dez.",
-    ];
-    const mes = meses[data.getMonth()];
-    const ano = data.getFullYear();
-    const hora = data.getHours().toString().padStart(2, "0");
-    const minuto = data.getMinutes().toString().padStart(2, "0");
-    return `${dia} de ${mes} de ${ano} ${hora}:${minuto}`;
-  };
-
-  const restaurarNota = async () => {
-    try {
-      const notasSalvas = await AsyncStorage.getItem("notas");
-      let arrayNotas = notasSalvas ? JSON.parse(notasSalvas) : [];
-
-      arrayNotas = arrayNotas.map((n: any) =>
-        n.id === notaSelecionada.id ? { ...n, lixeira: false } : n,
-      );
-
-      await AsyncStorage.setItem("notas", JSON.stringify(arrayNotas));
-      setNotas(arrayNotas.filter((n: any) => n.lixeira));
-      setModalVisivel(false);
-      setNotaSelecionada(null);
-    } catch (error) {
-      console.log("Erro ao restaurar:", error);
-    }
-  };
-
-  const excluirPermanente = async () => {
-    try {
-      const notasSalvas = await AsyncStorage.getItem("notas");
-      let arrayNotas = notasSalvas ? JSON.parse(notasSalvas) : [];
-
-      arrayNotas = arrayNotas.filter((n: any) => n.id !== notaSelecionada.id);
-
-      await AsyncStorage.setItem("notas", JSON.stringify(arrayNotas));
-      setNotas(arrayNotas.filter((n: any) => n.lixeira));
-      setModalVisivel(false);
-      setNotaSelecionada(null);
-    } catch (error) {
-      console.log("Erro ao excluir permanentemente:", error);
-    }
-  };
-
-  const confirmarEsvaziarLixeira = () => {
+export default function Trash() {
+  const { data } = useNotebook();
+  const c = usePalette();
+  const [search, setSearch] = useState("");
+  const [preview, setPreview] = useState<Note | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
+  const notes = data.notas
+    .filter(
+      (note) =>
+        note.lixeira &&
+        normalizeSearch(noteText(note)).includes(normalizeSearch(search)),
+    )
+    .sort(
+      (a, b) =>
+        Date.parse(b.deletedAt || b.data) - Date.parse(a.deletedAt || a.data),
+    );
+  const restore = (ids: string[]) =>
+    run(async () => {
+      await updateNotes(ids, { lixeira: false, deletedAt: undefined });
+      setPreview(null);
+      setSelected([]);
+    });
+  const remove = (ids: string[]) =>
     Alert.alert(
-      "Esvaziar Lixeira",
-      "Tem a certeza que deseja excluir permanentemente todas as notas da lixeira? Esta ação não pode ser desfeita.",
+      "Excluir permanentemente?",
+      `${ids.length} nota(s) serão apagadas. Esta ação não pode ser desfeita.`,
       [
         { text: "Cancelar", style: "cancel" },
-        { text: "Esvaziar", style: "destructive", onPress: esvaziarLixeira },
+        {
+          text: "Excluir",
+          style: "destructive",
+          onPress: () =>
+            run(async () => {
+              await removeNotes(ids);
+              setPreview(null);
+              setSelected([]);
+            }),
+        },
       ],
     );
-  };
-
-  const esvaziarLixeira = async () => {
-    try {
-      const notasSalvas = await AsyncStorage.getItem("notas");
-      if (notasSalvas) {
-        const todasNotas = JSON.parse(notasSalvas);
-        const notasRestantes = todasNotas.filter((n: any) => !n.lixeira);
-        await AsyncStorage.setItem("notas", JSON.stringify(notasRestantes));
-        setNotas([]);
-      }
-    } catch (error) {
-      console.log("Erro ao esvaziar a lixeira:", error);
-    }
-  };
-
-  // Filtramos as notas da lixeira pela pesquisa
-  const notasFiltradas = notas.filter((nota) =>
-    nota.texto.toLowerCase().includes(pesquisa.toLowerCase()),
-  );
-
+  const toggle = (id: string) =>
+    setSelected((items) =>
+      items.includes(id) ? items.filter((item) => item !== id) : [...items, id],
+    );
   return (
-    <View style={styles.container}>
-      {/* Componente que injeta a pesquisa no cabeçalho */}
-      <Drawer.Screen
+    <Screen>
+      <Stack.Screen
         options={{
-          headerTitle: () =>
-            pesquisaVisivel ? (
-              <TextInput
-                style={styles.inputCabecalho}
-                placeholder="Pesquisar na lixeira..."
-                placeholderTextColor="#C0CCFF"
-                autoFocus={true}
-                value={pesquisa}
-                onChangeText={setPesquisa}
-              />
-            ) : (
-              <Text style={styles.tituloCabecalho}>Lixeira</Text>
-            ),
+          title: "Lixeira",
           headerRight: () => (
-            <TouchableOpacity
-              onPress={() => {
-                if (pesquisaVisivel) {
-                  setPesquisa("");
-                  setPesquisaVisivel(false);
-                } else {
-                  setPesquisaVisivel(true);
-                }
-              }}
-              style={{ marginRight: 15, padding: 5 }}
-            >
-              <MaterialIcons
-                name={pesquisaVisivel ? "close" : "search"}
-                size={26}
-                color="#fff"
-              />
-            </TouchableOpacity>
+            <IconButton
+              name="delete-sweep"
+              label="Esvaziar toda a lixeira"
+              disabled={!data.notas.some((note) => note.lixeira)}
+              onPress={() =>
+                remove(
+                  data.notas
+                    .filter((note) => note.lixeira)
+                    .map((note) => note.id),
+                )
+              }
+            />
           ),
         }}
       />
-
-      {notasFiltradas.length === 0 ? (
-        <Text style={styles.textoVazio}>
-          {pesquisa.length > 0
-            ? "Nenhuma nota encontrada."
-            : "A lixeira está vazia."}
+      <View style={{ padding: 22, gap: 16 }}>
+        <Text style={{ color: c.muted, lineHeight: 22 }}>
+          Suas notas ficam aqui até você decidir restaurar ou excluir. Toque
+          para ler; segure para selecionar.
         </Text>
-      ) : (
-        <FlatList
-          data={notasFiltradas} // Usa as notas filtradas
-          keyExtractor={(item) => item.id}
-          keyboardShouldPersistTaps="handled"
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.cardNota}
-              onPress={() => {
-                setNotaSelecionada(item);
-                setModalVisivel(true);
+        <TextInput
+          accessibilityLabel="Pesquisar na lixeira"
+          placeholder="Buscar na lixeira"
+          placeholderTextColor={c.muted}
+          value={search}
+          onChangeText={setSearch}
+          style={{
+            color: c.text,
+            backgroundColor: c.surface,
+            borderRadius: 14,
+            padding: 15,
+            borderWidth: 1,
+            borderColor: c.line,
+          }}
+        />
+        {selected.length > 0 && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              backgroundColor: c.soft,
+              borderRadius: 14,
+              paddingLeft: 12,
+            }}
+          >
+            <Text style={{ flex: 1, color: c.text }}>
+              {selected.length} selecionada(s)
+            </Text>
+            <IconButton
+              name="select-all"
+              label="Selecionar todas as notas visíveis"
+              onPress={() => setSelected(notes.map((note) => note.id))}
+            />
+            <IconButton
+              name="restore"
+              label="Restaurar selecionadas"
+              onPress={() => restore(selected)}
+            />
+            <IconButton
+              name="delete-forever"
+              label="Excluir selecionadas permanentemente"
+              danger
+              onPress={() => remove(selected)}
+            />
+            <IconButton
+              name="close"
+              label="Cancelar seleção"
+              onPress={() => setSelected([])}
+            />
+          </View>
+        )}
+      </View>
+      <FlatList
+        data={notes}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={{ paddingHorizontal: 22, paddingBottom: 30 }}
+        ListEmptyComponent={
+          <Empty
+            title={search ? "Nenhum resultado" : "Tudo em ordem"}
+            detail={
+              search
+                ? "Tente buscar com outras palavras."
+                : "As notas excluídas aparecerão aqui."
+            }
+          />
+        }
+        renderItem={({ item }) => (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Ler ${noteTitle(item)}`}
+            accessibilityState={{ selected: selected.includes(item.id) }}
+            onLongPress={() => toggle(item.id)}
+            onPress={() =>
+              selected.length ? toggle(item.id) : setPreview(item)
+            }
+            style={{
+              backgroundColor: selected.includes(item.id) ? c.soft : c.surface,
+              borderRadius: 16,
+              padding: 18,
+              marginBottom: 10,
+              borderWidth: 1,
+              borderColor: c.line,
+            }}
+          >
+            <Text
+              numberOfLines={2}
+              style={{ color: c.text, fontSize: 18, fontWeight: "600" }}
+            >
+              {selected.includes(item.id) ? "✓ " : ""}
+              {noteTitle(item)}
+            </Text>
+            <Text
+              numberOfLines={2}
+              style={{ color: c.muted, lineHeight: 23, marginTop: 8 }}
+            >
+              {item.kind === "checklist"
+                ? item.items.map((entry) => entry.text).join(" · ")
+                : item.texto}
+            </Text>
+            <Text style={{ color: c.muted, fontSize: 12, marginTop: 12 }}>
+              Excluída · {formatDate(item.deletedAt || item.data)}
+            </Text>
+          </Pressable>
+        )}
+      />
+      <Sheet
+        title="Nota na lixeira"
+        visible={!!preview}
+        onClose={() => setPreview(null)}
+      >
+        {preview && (
+          <View style={{ gap: 18 }}>
+            <Text
+              selectable
+              style={{
+                color: c.text,
+                fontSize: data.preferences.fontSize,
+                lineHeight: data.preferences.fontSize * 1.6,
               }}
             >
-              <Text numberOfLines={1} style={styles.textoNota}>
-                {item.texto}
-              </Text>
-              {item.data && (
-                <Text style={styles.dataNota}>{formatarData(item.data)}</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        />
-      )}
-
-      {/* Oculta o botão de esvaziar tudo se a pesquisa não retornar nada ou a lixeira estiver vazia */}
-      {notasFiltradas.length > 0 && (
-        <TouchableOpacity style={styles.fab} onPress={confirmarEsvaziarLixeira}>
-          <MaterialIcons name="delete-sweep" size={28} color="white" />
-        </TouchableOpacity>
-      )}
-
-      <Modal transparent={true} visible={modalVisivel} animationType="fade">
-        <TouchableOpacity
-          style={styles.fundoModal}
-          onPress={() => setModalVisivel(false)}
-          activeOpacity={1}
-        >
-          <View style={styles.caixaMenu}>
-            <TouchableOpacity style={styles.itemMenu} onPress={restaurarNota}>
-              <Text style={[styles.textoMenu, { color: "#4A64E6" }]}>
-                Restaurar Nota
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.itemMenu}
-              onPress={excluirPermanente}
-            >
-              <Text style={[styles.textoMenu, { color: "#d9534f" }]}>
-                Excluir Permanentemente
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.itemMenu}
-              onPress={() => setModalVisivel(false)}
-            >
-              <Text
-                style={[
-                  styles.textoMenu,
-                  { fontWeight: "bold", color: "#333" },
-                ]}
-              >
-                Cancelar
-              </Text>
-            </TouchableOpacity>
+              {noteText(preview) || "Nota vazia"}
+            </Text>
+            <Button onPress={() => restore([preview.id])}>
+              Restaurar nota
+            </Button>
+            <Button danger onPress={() => remove([preview.id])}>
+              Excluir permanentemente
+            </Button>
           </View>
-        </TouchableOpacity>
-      </Modal>
-    </View>
+        )}
+      </Sheet>
+    </Screen>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF" },
-
-  // Estilos do cabeçalho
-  tituloCabecalho: {
-    color: "#fff",
-    fontSize: 20,
-    fontWeight: "600",
-  },
-  inputCabecalho: {
-    color: "#fff",
-    fontSize: 18,
-    width: "100%",
-  },
-
-  textoVazio: {
-    fontSize: 16,
-    color: "#666",
-    textAlign: "center",
-    marginTop: 50,
-  },
-  cardNota: {
-    padding: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0E0",
-  },
-  textoNota: {
-    fontSize: 18,
-    color: "#222",
-    marginBottom: 8,
-  },
-  dataNota: {
-    fontSize: 14,
-    color: "#888888",
-    textAlign: "right",
-  },
-  fab: {
-    position: "absolute",
-    width: 60,
-    height: 60,
-    alignItems: "center",
-    justifyContent: "center",
-    right: 20,
-    bottom: 35,
-    backgroundColor: "#d9534f",
-    borderRadius: 30,
-    elevation: 8,
-    shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  fundoModal: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.4)",
-    justifyContent: "center",
-    alignItems: "center",
-  },
-  caixaMenu: {
-    width: "80%",
-    backgroundColor: "#FFFFFF",
-    borderRadius: 8,
-    elevation: 5,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    paddingVertical: 10,
-  },
-  itemMenu: {
-    paddingVertical: 15,
-    paddingHorizontal: 20,
-  },
-  textoMenu: {
-    fontSize: 16,
-    color: "#333",
-  },
-});
